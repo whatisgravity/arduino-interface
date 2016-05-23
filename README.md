@@ -29,7 +29,21 @@ included.
 
 The golang client is not finished but it planned.
 
-## Installation
+## Interface directly with arduino
+
+To interface directly with the arduino over serial you first must
+initialize a port:
+
+    {"setPins":[{"number": 5, "output": true, "analog": true}]}
+
+You can set more than one pin at a time:
+
+    {"setPins":[{"number": 5, "output": true, "analog": true},
+{"number": 2, "output": true, "analog": true}]}
+
+After setting a pin you can change the value:
+
+## Installation of included tools
 
 An install script has been included to simplyify installation but the basic instructions are below:
 
@@ -51,7 +65,7 @@ Then start the server
 
 Then you can use the ltctrl command to control the lights. 
 
-## Usage
+## Usage with included tools
 
 For the command line interface:
 

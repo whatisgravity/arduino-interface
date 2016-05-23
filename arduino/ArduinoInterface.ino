@@ -1,63 +1,57 @@
 #include <ArduinoJson.h>
-#include <Event.h>
+#include <AikoEvents.h>
+
 
 // Time constants
 const signed long millisecond  = 10000;
 const signed long second       = 100000;
 
 // Event Scheduler
-int state = 0;
-event Event;
+using namespace Aiko;
 
 // Serial Interface
 boolean         inJson;
 int             inByte;
-char            data[255];
+String          inString;
 int             inChar;
+int             openBrackets = 0;
 
 // Pins
 typedef struct {
+  bool   active = false;
   int    number;
   bool   analog;
-  byte   mode;
-  int    current  = 0;
-  int    target   = 0;
-  int    velocity = 0;
+  bool   output;
+  int    current;
+  int    target;
+  int    velocity;
 } Pin;
 
-Pin pins[24];
+Pin pins[32];
 
 void setup() {
   Serial.begin(9600);
   while (!Serial) {
     // wait serial port initialization
   }
-  char rwp[] = "rwPins";
-  char rws[] = "rwSerial";
-  Event.Add(rws, (100 * millisecond), rwSerial);
-  Event.Add(rwp,  75000,  rwPins);
+  Events.addHandler(writeSerial, 1500);
+  //Events.addHandler(rwPins, 1500);
+  //Events.addHandler(readSerial, 1500);
+
   Serial.println("Interface Active");
 }
 
 void loop() {
-  Event.Service();
+  Events.loop();
 }
 
-// Validations
-int boolValueValidation(int value){
-  if(value <= 0){
-    value = 0;
-  }else if(value >= 1){
-    value = 1;
-  }
-}
-
+// Validation
 int intValueValidation(int value, bool velocity = false) {
   int minValue = 0;
   if(velocity){
     minValue = 1;
   }
-  if(value < minValue)
+  if(value <= minValue)
     value = minValue;
   else if(value > 255){
     value = 255;
@@ -67,132 +61,150 @@ int intValueValidation(int value, bool velocity = false) {
 
 // Write To Output Pins
 void rwPins(){
-  Pin pin;
-  for(int i = 0; i < sizeof(pins); i++){
-    pin = pins[i];
-    if(pin.mode == OUTPUT){
-      if(pin.analog){
-        if(pin.current != pin.target){
-          analogWrite(pin.number, pin.current);
-          if(pin.current < pin.target){
-            pin.current += pin.velocity;
-            if((pin.velocity + pin.current) > pin.target){
-              pin.current = pin.target;
-            }
-          }else if(pin.current > pin.target){
-            pin.current -= pin.velocity;
-            if((pin.velocity - pin.current) < pin.target){
-              pin.current = pin.target;
+  for(int i = 0; i < 32; i++){
+    if(pins[i].active || pins[i].number != 0){
+      if(!pins[i].output){
+        if(pins[i].analog){
+          pins[i].current = analogRead(i);
+        }else{
+          pins[i].current = digitalRead(i);
+        }
+       }else{
+        if(pins[i].analog){
+          if(pins[i].current != pins[i].target){
+            analogWrite(i, pins[i].current);
+            if(pins[i].current < pins[i].target){
+              pins[i].current += pins[i].velocity;
+              Serial.println("Increasing");
+              if((pins[i].velocity + pins[i].current) >= pins[i].target){
+                pins[i].current = pins[i].target;
+                pins[i].velocity = 0;
+              }
+            }else if(pins[i].current > pins[i].target){
+              pins[i].current -= pins[i].velocity;
+              if((pins[i].velocity - pins[i].current) <= pins[i].target){
+                pins[i].current = pins[i].target;
+                pins[i].velocity = 0;
+              }
             }
           }
         }
       }
-    }else{
-      if(pin.analog){
-        pin.current = analogRead(pin.number);
-      }else{
-        pin.current = digitalRead(pin.number);
-      }
     }
   }
 }
-// Read And Write Serial
-void rwSerial(){
-  serialOutput();
-  serialInput();
-}
 
-// Serial Ouput
-void serialOutput(){
+void zzwriteSerialbe(){
   DynamicJsonBuffer jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();
   JsonArray& jsonPins = root.createNestedArray("pins");
-  int pinCount = sizeof(pins);
-  Pin pin;
-  for(int i = 0; i < pinCount; i++){
-    pin = pins[i];
-    StaticJsonBuffer<255> jsonPinBuffer;
+  StaticJsonBuffer<255> jsonPinBuffer;
+  
+  for(int i = 0; i < 32; i++){
     JsonObject& pinRoot = jsonPinBuffer.createObject();
-    pinRoot["number"] = pin.number;
-    pinRoot["analog"] = pin.analog;
-    pinRoot["mode"] = pin.mode;
-    if(pin.mode == OUTPUT){
-      pinRoot["current"] = pin.current;
-      if(!pin.analog){
-        pinRoot["target"] = pin.target;
-        pinRoot["velocity"] = pin.velocity;
-      }  
+    int validatedNumber = intValueValidation(pins[i].number);
+    if(pins[validatedNumber].active == true && validatedNumber != 0){
+      pinRoot["number"] = pins[validatedNumber].number;
+      pinRoot["analog"] = pins[validatedNumber].analog;
+      pinRoot["output"] = pins[validatedNumber].output;
+      if(pins[validatedNumber].output){
+        pinRoot["current"] = pins[validatedNumber].current;
+        if(pins[validatedNumber].analog){
+          pinRoot["target"] = pins[validatedNumber].target;
+          pinRoot["velocity"] = pins[validatedNumber].velocity;
+          //Serial.println("current " + String(pinRoot["current"]));
+          
+          //Serial.println("velocity " + String(pinRoot["velocity"]));
+
+        }
+      }
+      jsonPins.add(pinRoot);
     }
-    jsonPins.add(pinRoot);
   }
-  root.printTo(Serial);
+}
+
+void writeSerial(){
+  Serial.println("dinge and dinge etwas etwas etwas");
+  //String printBuffer;
+  //root.printTo(printBuffer);
+  //Serial.println(printBuffer);
+  //root.printTo(Serial);
+  Serial.flush();
 }
 
 // Serial Input Functions
 void constructJson(int inChar){
-  // 123 is ASCII for {, the start of a JSON statement
-  if(inChar == 123 || inJson == true){
-    data[sizeof(data) + 1] = (char) inChar;
-    inJson = true;
+  inString += (char) inChar;
+  if(inChar == 123){
+    openBrackets += 1;
+  }else if(inChar == 125){
+     if(openBrackets > 0){
+       openBrackets -= 1;
+       if(openBrackets <= 0){
+         processJson(inString);
+         inString = "";
+       }
+     }
   }
-  // 125 is ASCII for }, the end of a JSON statement
-  if(inChar == 125){
-    inJson = false;
-    processJson();
-   data[0] = (char) 0;
+  if(inString[0] != 123 || (inString[0] != 123 && inString[1] != 34) || sizeof(inString) > 500){
+    inString = "";
   }
 }
 
-// Serial Input
-void serialInput(){
+void processJson(String jsonData){
+  // {"setPins":[{"number": 2, "output": true, "analog": true}]}
+  StaticJsonBuffer<255> jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(jsonData);
+  int validatedNumber;
+  if(sizeof(root["setPins"]) > 0){
+    for(int i = 0; i < 32; i++){
+      validatedNumber = intValueValidation(root["setPins"][i]["number"]);
+      if(!pins[validatedNumber].active && pins[validatedNumber].number == 0){
+        pins[validatedNumber].number = validatedNumber;
+        pins[validatedNumber].active = true;
+        pins[validatedNumber].analog = root["setPins"][i]["analog"];
+        pins[validatedNumber].current = 0;
+        if(root["setPins"][i]["output"]){
+          pins[validatedNumber].target = 0;
+          pins[validatedNumber].velocity = 0;
+          pinMode(validatedNumber, OUTPUT);
+          pins[validatedNumber].output = true;
+        }else{
+          pinMode(validatedNumber, INPUT);
+          pins[validatedNumber].output = false;
+        }
+      }
+    }
+  }
+  // {"changePins":[{"number": 2, "target": 125, "velocity": 5}]}
+  if(sizeof(root["changePins"]) > 0){
+    for(int i = 0; i < 32; i++){
+      validatedNumber = intValueValidation(root["changePins"][i]["number"]);
+      if(pins[validatedNumber].active && pins[validatedNumber].number != 0 && pins[validatedNumber].output){
+        if(pins[validatedNumber].analog){
+          pins[validatedNumber].target = intValueValidation(root["changePins"][i]["target"]);
+          pins[validatedNumber].velocity = intValueValidation(root["changePins"][i]["velocity"], true);
+        }else{
+          Serial.println("digital write");
+          if(root["changePins"][i]["target"] == "high"){
+            pins[validatedNumber].current =  HIGH;
+            digitalWrite(validatedNumber, pins[validatedNumber].current);
+          }else{
+            pins[validatedNumber].current =  LOW;
+            digitalWrite(validatedNumber, pins[validatedNumber].current);
+          }
+        }
+      }
+    }
+  }
+  //writeSerial();
+}
+
+// Read And Write Serial
+void readSerial(){
   if(Serial.available() > 0){
     do{inChar = Serial.read();}while (inChar == -1);
     constructJson(inChar);
   }
 }
 
-void processJson(){
-  StaticJsonBuffer<255> jsonBuffer;
-  JsonObject& root = jsonBuffer.parseObject(data);
-  if(sizeof(root["setPins"]) > 0){
-    for(int i = 0; i < sizeof(root["setPins"]); i++){
-      Pin newPin;
-      if(root["setPins"][i]["analog"] == "true"){
-        newPin.analog = true;
-      }else{
-        newPin.analog = false;
-      }
-      newPin.number = intValueValidation(root["setPins"][i]["number"]);
-      if(root["setPins"][i]["mode"] == "output"){
-        pinMode(newPin.number, OUTPUT);
-        newPin.mode = OUTPUT;
-      }else{
-        pinMode(newPin.number, INPUT);
-        newPin.mode = INPUT;
-      }
-    }
-  }
-  if(sizeof(root["changePins"]) > 0){
-     Pin pin;
-    for(int i = 0; i < sizeof(root["changePins"]); i++){
-      for(int j = 0; j < sizeof(pins); j++){
-        // These types of comparisons are likely to fail
-        if(pins[j].number == root["setPins"][i]["number"]){
-          if(pins[j].analog){
-            pins[j].target = intValueValidation(root["setPins"][i]["target"]);
-            pins[j].velocity = intValueValidation(root["setPins"][i]["velocity"], true);
-          }else{
-            // This will probably not work
-            if("HIGH" == root["setPins"][i]["target"]){
-              pins[j].current =  HIGH;
-              digitalWrite(pins[j].number, pins[j].current);
-            }else{
-              pins[j].current =  LOW;
-              digitalWrite(pins[j].number, pins[j].current);
-            }
-          }
-        }
-      }
-    }
-  }
-}
