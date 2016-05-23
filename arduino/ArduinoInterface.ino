@@ -1,24 +1,23 @@
 #include <ArduinoJson.h>
 #include <Event.h>
 
-
 // Time constants
-const int millisecond  = 10000;
-const int second       = 100000;
+const signed long millisecond  = 10000;
+const signed long second       = 100000;
 
 // Event Scheduler
 int state = 0;
 event Event;
 
 // Serial Interface
-boolean         inJson   = false;
-int             inByte   = 0;
-//String          inString = "";
-int             inChar   = 0;
+boolean         inJson;
+int             inByte;
+char            data[255];
+int             inChar;
 
 // Pins
 typedef struct {
-  int   number;
+  int    number;
   bool   analog;
   byte   mode;
   int    current  = 0;
@@ -30,8 +29,13 @@ Pin pins[24];
 
 void setup() {
   Serial.begin(9600);
-  Event.Add("rwSerial", (100 * millisecond), serialOutput);
-  Event.Add("rwPins",  (75 * millisecond),  rwPins);
+  while (!Serial) {
+    // wait serial port initialization
+  }
+  char rwp[] = "rwPins";
+  char rws[] = "rwSerial";
+  Event.Add(rws, (100 * millisecond), rwSerial);
+  Event.Add(rwp,  75000,  rwPins);
   Serial.println("Interface Active");
 }
 
@@ -94,20 +98,20 @@ void rwPins(){
 }
 // Read And Write Serial
 void rwSerial(){
-
+  serialOutput();
+  serialInput();
 }
 
 // Serial Ouput
 void serialOutput(){
-  StaticJsonBuffer<200> jsonBuffer;
+  DynamicJsonBuffer jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();
-  
   JsonArray& jsonPins = root.createNestedArray("pins");
   int pinCount = sizeof(pins);
   Pin pin;
   for(int i = 0; i < pinCount; i++){
     pin = pins[i];
-    StaticJsonBuffer<200> jsonPinBuffer;
+    StaticJsonBuffer<255> jsonPinBuffer;
     JsonObject& pinRoot = jsonPinBuffer.createObject();
     pinRoot["number"] = pin.number;
     pinRoot["analog"] = pin.analog;
@@ -124,35 +128,32 @@ void serialOutput(){
   root.printTo(Serial);
 }
 
-// Serial Input
-void serialInput(){
-  //if(Serial.available() > 0){
-    //do{inChar = Serial.read();}while (inChar == -1);
-    //constructString(inChar);
-  //}
-}
-
 // Serial Input Functions
-void constructString(int inChar){
+void constructJson(int inChar){
   // 123 is ASCII for {, the start of a JSON statement
   if(inChar == 123 || inJson == true){
-    //inString += (char) inChar;
+    data[sizeof(data) + 1] = (char) inChar;
     inJson = true;
   }
   // 125 is ASCII for }, the end of a JSON statement
   if(inChar == 125){
     inJson = false;
-    //processString(inString);
-    //inString = "";
+    processJson();
+   data[0] = (char) 0;
   }
 }
 
+// Serial Input
+void serialInput(){
+  if(Serial.available() > 0){
+    do{inChar = Serial.read();}while (inChar == -1);
+    constructJson(inChar);
+  }
+}
 
-void processString(String inString){
-  StaticJsonBuffer<200> jsonBuffer;
-  char json[128];
-  inString.toCharArray(json, 128);
-  JsonObject& root = jsonBuffer.parseObject(inString);
+void processJson(){
+  StaticJsonBuffer<255> jsonBuffer;
+  JsonObject& root = jsonBuffer.parseObject(data);
   if(sizeof(root["setPins"]) > 0){
     for(int i = 0; i < sizeof(root["setPins"]); i++){
       Pin newPin;
@@ -195,5 +196,3 @@ void processString(String inString){
     }
   }
 }
-
-
