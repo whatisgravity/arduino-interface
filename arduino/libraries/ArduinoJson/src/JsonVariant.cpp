@@ -17,31 +17,7 @@ using namespace ArduinoJson::Internals;
 
 namespace ArduinoJson {
 
-template <typename TFloat>
-static TFloat parse(const char *);
-
-template <>
-float parse<float>(const char *s) {
-  return static_cast<float>(strtod(s, NULL));
-}
-
-template <>
-double parse<double>(const char *s) {
-  return strtod(s, NULL);
-}
-
-template <>
-long parse<long>(const char *s) {
-  return strtol(s, NULL, 10);
-}
-
-template <>
-int parse<int>(const char *s) {
-  return atoi(s);
-}
-
-template <>
-const char *JsonVariant::as<const char *>() const {
+const char *JsonVariant::asString() const {
   if (_type == JSON_UNPARSED && _content.asString &&
       !strcmp("null", _content.asString))
     return NULL;
@@ -50,33 +26,23 @@ const char *JsonVariant::as<const char *>() const {
 }
 
 JsonFloat JsonVariant::asFloat() const {
-  if (_type >= JSON_FLOAT_0_DECIMALS) return _content.asFloat;
-
-  if (_type == JSON_INTEGER || _type == JSON_BOOLEAN)
-    return static_cast<JsonFloat>(_content.asInteger);
-
-  if ((_type == JSON_STRING || _type == JSON_UNPARSED) && _content.asString)
-    return parse<JsonFloat>(_content.asString);
-
-  return 0.0;
-}
-
-JsonInteger JsonVariant::asInteger() const {
-  if (_type == JSON_INTEGER || _type == JSON_BOOLEAN) return _content.asInteger;
-
-  if (_type >= JSON_FLOAT_0_DECIMALS)
-    return static_cast<JsonInteger>(_content.asFloat);
-
-  if ((_type == JSON_STRING || _type == JSON_UNPARSED) && _content.asString) {
-    if (!strcmp("true", _content.asString)) return 1;
-    return parse<JsonInteger>(_content.asString);
+  switch (_type) {
+    case JSON_UNDEFINED:
+      return 0;
+    case JSON_POSITIVE_INTEGER:
+    case JSON_BOOLEAN:
+      return static_cast<JsonFloat>(_content.asInteger);
+    case JSON_NEGATIVE_INTEGER:
+      return -static_cast<JsonFloat>(_content.asInteger);
+    case JSON_STRING:
+    case JSON_UNPARSED:
+      return _content.asString ? parse<JsonFloat>(_content.asString) : 0;
+    default:
+      return _content.asFloat;
   }
-
-  return 0L;
 }
 
-template <>
-String JsonVariant::as<String>() const {
+String JsonVariant::toString() const {
   String s;
   if ((_type == JSON_STRING || _type == JSON_UNPARSED) &&
       _content.asString != NULL)
@@ -86,9 +52,18 @@ String JsonVariant::as<String>() const {
   return s;
 }
 
-template <>
-bool JsonVariant::is<signed long>() const {
-  if (_type == JSON_INTEGER) return true;
+bool JsonVariant::isBoolean() const {
+  if (_type == JSON_BOOLEAN) return true;
+
+  if (_type != JSON_UNPARSED || _content.asString == NULL) return false;
+
+  return !strcmp(_content.asString, "true") ||
+         !strcmp(_content.asString, "false");
+}
+
+bool JsonVariant::isInteger() const {
+  if (_type == JSON_POSITIVE_INTEGER || _type == JSON_NEGATIVE_INTEGER)
+    return true;
 
   if (_type != JSON_UNPARSED || _content.asString == NULL) return false;
 
@@ -99,8 +74,7 @@ bool JsonVariant::is<signed long>() const {
   return *end == '\0' && errno == 0;
 }
 
-template <>
-bool JsonVariant::is<double>() const {
+bool JsonVariant::isFloat() const {
   if (_type >= JSON_FLOAT_0_DECIMALS) return true;
 
   if (_type != JSON_UNPARSED || _content.asString == NULL) return false;
@@ -113,27 +87,39 @@ bool JsonVariant::is<double>() const {
 }
 
 void JsonVariant::writeTo(JsonWriter &writer) const {
-  if (_type == JSON_ARRAY)
-    _content.asArray->writeTo(writer);
+  switch (_type) {
+    case JSON_UNDEFINED:
+      return;
 
-  else if (_type == JSON_OBJECT)
-    _content.asObject->writeTo(writer);
+    case JSON_ARRAY:
+      _content.asArray->writeTo(writer);
+      return;
 
-  else if (_type == JSON_STRING)
-    writer.writeString(_content.asString);
+    case JSON_OBJECT:
+      _content.asObject->writeTo(writer);
+      return;
 
-  else if (_type == JSON_UNPARSED)
-    writer.writeRaw(_content.asString);
+    case JSON_STRING:
+      writer.writeString(_content.asString);
+      return;
 
-  else if (_type == JSON_INTEGER)
-    writer.writeInteger(_content.asInteger);
+    case JSON_UNPARSED:
+      writer.writeRaw(_content.asString);
+      return;
 
-  else if (_type == JSON_BOOLEAN)
-    writer.writeBoolean(_content.asInteger != 0);
+    case JSON_NEGATIVE_INTEGER:
+      writer.writeRaw('-');
+    case JSON_POSITIVE_INTEGER:
+      writer.writeInteger(_content.asInteger);
+      return;
 
-  else if (_type >= JSON_FLOAT_0_DECIMALS) {
-    uint8_t decimals = static_cast<uint8_t>(_type - JSON_FLOAT_0_DECIMALS);
-    writer.writeFloat(_content.asFloat, decimals);
+    case JSON_BOOLEAN:
+      writer.writeBoolean(_content.asInteger != 0);
+      return;
+
+    default:
+      uint8_t decimals = static_cast<uint8_t>(_type - JSON_FLOAT_0_DECIMALS);
+      writer.writeFloat(_content.asFloat, decimals);
   }
 }
 }

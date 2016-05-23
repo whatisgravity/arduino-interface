@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+namespace ArduinoJson {
 // This class reproduces Arduino's Print class
 class Print {
  public:
@@ -19,12 +20,17 @@ class Print {
 
   virtual size_t write(uint8_t) = 0;
 
-  size_t print(const char[]);
-  size_t print(double, int = 2);
-  size_t print(int);
-  size_t print(long);
-  size_t println();
+  size_t print(const char* s) {
+    size_t n = 0;
+    while (*s) {
+      n += write(*s++);
+    }
+    return n;
+  }
+
+  size_t println() { return write('\r') + write('\n'); }
 };
+}
 
 #else
 
