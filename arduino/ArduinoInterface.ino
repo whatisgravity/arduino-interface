@@ -34,11 +34,9 @@ void setup() {
   while (!Serial) {
     // wait serial port initialization
   }
-  Events.addHandler(writeSerial, 1500);
-  //Events.addHandler(rwPins, 1500);
-  //Events.addHandler(readSerial, 1500);
-
-  Serial.println("Interface Active");
+  Events.addHandler(writeSerial, 500);
+  Events.addHandler(rwPins, 500);
+  Events.addHandler(readSerial, 25);
 }
 
 void loop() {
@@ -65,17 +63,17 @@ void rwPins(){
     if(pins[i].active || pins[i].number != 0){
       if(!pins[i].output){
         if(pins[i].analog){
-          pins[i].current = analogRead(i);
+          pins[i].current = analogRead(pins[i].number);
         }else{
-          pins[i].current = digitalRead(i);
+          pins[i].current = digitalRead(pins[i].number);
         }
        }else{
         if(pins[i].analog){
           if(pins[i].current != pins[i].target){
-            analogWrite(i, pins[i].current);
+            analogWrite(pins[i].number, pins[i].current);
+            writeSerial();
             if(pins[i].current < pins[i].target){
               pins[i].current += pins[i].velocity;
-              Serial.println("Increasing");
               if((pins[i].velocity + pins[i].current) >= pins[i].target){
                 pins[i].current = pins[i].target;
                 pins[i].velocity = 0;
@@ -94,12 +92,13 @@ void rwPins(){
   }
 }
 
-void zzwriteSerialbe(){
+void writeSerial(){
+
+  
   DynamicJsonBuffer jsonBuffer;
   JsonObject& root = jsonBuffer.createObject();
   JsonArray& jsonPins = root.createNestedArray("pins");
   StaticJsonBuffer<255> jsonPinBuffer;
-  
   for(int i = 0; i < 32; i++){
     JsonObject& pinRoot = jsonPinBuffer.createObject();
     int validatedNumber = intValueValidation(pins[i].number);
@@ -112,24 +111,19 @@ void zzwriteSerialbe(){
         if(pins[validatedNumber].analog){
           pinRoot["target"] = pins[validatedNumber].target;
           pinRoot["velocity"] = pins[validatedNumber].velocity;
-          //Serial.println("current " + String(pinRoot["current"]));
-          
-          //Serial.println("velocity " + String(pinRoot["velocity"]));
-
         }
       }
       jsonPins.add(pinRoot);
     }
   }
-}
-
-void writeSerial(){
-  Serial.println("dinge and dinge etwas etwas etwas");
-  //String printBuffer;
-  //root.printTo(printBuffer);
-  //Serial.println(printBuffer);
+  //char json[128];
+  //root.printTo(json, sizeof(json));
   //root.printTo(Serial);
-  Serial.flush();
+
+  Serial.print("test");
+
+  //Serial.print("]}");
+
 }
 
 // Serial Input Functions
@@ -197,7 +191,7 @@ void processJson(String jsonData){
       }
     }
   }
-  //writeSerial();
+  writeSerial();
 }
 
 // Read And Write Serial
