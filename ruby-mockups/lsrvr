@@ -1,0 +1,51 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'yaml'
+
+unless File.expand_path('~/.lctrl.yml', __FILE__).nil?
+  filepath = File.expand_path('~/.lctrl.yml', __FILE__)
+else
+  filepath = File.expand_path('./../config/config.yml', __FILE__)
+end
+
+
+aliases = {
+  "-s"  => "--server",
+  "-d"  => "--daemon",
+  "-h"  => "--help"
+}
+
+ARGV.each_with_index do |argument, index|
+  ARGV[index] = aliases[argument] || argument
+end
+
+if ARGV.include?("--server") and filepath 
+  @configuration = YAML::load_file(filepath)
+  @configuration = @configuration["servers"][ARGV[ARGV.index("--server")+1]]
+else
+  @configuration = {}
+  @configuration["http_port"]      = 8783
+  @configuration["websocket_port"] = 8784
+  @configuration["tcp_port"]       = 8785
+end
+
+if ARGV.include?("--help")
+  puts "\n    ## Light Server"
+  puts "      Usage:"
+  puts "      Please specify the server defined in the configuration to start:\n"
+  puts "          lsrvr [options]"
+  puts "      Options:"
+  puts "          --server [option]       # Provide the name of a server, if none default ports (8783, 8784, 8785) will be used\n"
+  puts "          --daemon                # Daemonize the server\n"
+  puts "      Example:"
+  puts "          lsrvr -s desk\n\n"
+else
+  5.times do |i|
+    if ARGV.include?("--daemon")
+      system "nohup serialport-server /dev/ttyACM#{i} -hp #{@configuration["http_port"]} -wp #{@configuration["websocket_port"]} -sp #{@configuration["tcp_port"]} &"
+    else
+      system "serialport-server /dev/ttyACM#{i} -hp #{@configuration["http_port"]} -wp #{@configuration["websocket_port"]} -sp #{@configuration["tcp_port"]}"
+    end
+  end
+end
+

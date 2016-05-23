@@ -1,0 +1,27 @@
+# Store application setting variables and sensitive information here.
+# Rename this file to "config.yml"
+
+api_version: "1"
+
+servers:
+  desk:
+    host_ip: "192.168.1.138"
+    http_port: 8783
+    websocket_port: 8784
+    tcp_port: 8785
+  wall:
+    host_ip: "192.168.1.105"
+    http_port: 8783
+    websocket_port: 8784
+    tcp_port: 8785
+
+presets:
+  chill:
+    desk:
+      red: 25
+      blue: 214
+      green: 115
+    wall:
+      red: 25
+      blue: 115
+      green: 242

@@ -1,0 +1,112 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'json'
+require 'yaml'
+
+unless File.expand_path('~/.lctrl.yml', __FILE__).nil?
+  filepath = File.expand_path('~/.lctrl.yml', __FILE__)
+else
+  filepath = File.expand_path('./../config/config.yml', __FILE__)
+end
+
+if filepath 
+  @configuration = YAML::load_file(filepath)
+else
+  puts "# Error"
+  puts "You must configure at least one server in the configuration file."
+  exit
+end
+
+def set_lights(red: 0, green: 0, blue: 0, location: "all")
+  colors = "{\"red\":#{red},\"green\":#{green},\"blue\":#{blue}}"
+  if location == "all"
+    @configuration["servers"].each do |server, config|
+      p "Attempting to update the lights on: #{server}..."
+      system "curl -d '#{colors}' http://#{config["host_ip"]}:#{config["http_port"]}"
+    end
+  else
+    p "Attempting to update the lights on: #{@configuration["servers"][location]}..."
+    system "curl -d '#{colors}' http://#{@configuration["servers"][location]["host_ip"]}:#{@configuration["servers"][location]["http_port"]}"
+  end
+  puts "\n"
+end
+
+ARGV << '--help' if ARGV.empty?
+
+aliases = {
+  "-j"  => "--json",
+  "-r"  => "--red",
+  "-b"  => "--blue",
+  "-g"  => "--green",
+  "-rn" => "--random",
+  "-m"  => "--mood",
+  "-x"  => "--off",
+  "-s"  => "--server",
+  "-h"  => "--help",
+  "-c"  => "--color"
+}
+
+ARGV.each_with_index do |argument, index|
+  ARGV[index] = aliases[argument] || argument
+end
+
+if ARGV.include?("--server")
+  server = ARGV[ARGV.index("--server")+1]
+else
+  server = "all"
+end
+
+if ARGV.include?("--blue") or ARGV.include?("--red") or ARGV.include?("--green")
+  red   = ARGV.include?("--red")   ? ARGV[ARGV.index("--red")+1]   : 0
+  green = ARGV.include?("--green") ? ARGV[ARGV.index("--green")+1] : 0
+  blue  = ARGV.include?("--blue")  ? ARGV[ARGV.index("--blue")+1]  : 0
+  set_lights(red: red, green: green, blue: blue, location: server)
+elsif ARGV.include?("--mood")
+  mood = ARGV[ARGV.index("--mood")+1]
+  if mood == "chill"
+    @configuration["servers"].each_with_index do |server, index|
+      if index.odd?
+        set_lights(red: 0, green: 125, blue: 254, location: server[0])
+      else
+        set_lights(red: 0, green: 254, blue: 74, location: server[0])
+      end
+    end
+  end
+elsif ARGV.include?("--random")
+  @configuration["servers"].each_with_index do |server, index|
+    if index.odd?
+      set_lights(red: rand(255), green: rand(255), blue: rand(255), location: server[0])
+    else
+      set_lights(red: rand(255), green: rand(255), blue: rand(255), location: server[0])
+    end
+  end
+elsif (ARGV.include?("--color") and ARGV[ARGV.index("--color")+1] == "white")
+  set_lights(red: 255, green: 255, blue: 255, location: server)
+elsif (ARGV.include?("--color") and ARGV[ARGV.index("--color")+1] == "blue")
+  set_lights(blue: 255, location: server)
+elsif ARGV.include?("--off")
+  set_lights(location: server)
+elsif ARGV.include?("--json")
+  colors = JSON.parse(ARGV[ARGV.index("--json")+1])
+  colors["red"]   = 0     if colors["red"].nil?
+  colors["green"] = 0     if colors["green"].nil?
+  colors["blue"]  = 0     if colors["blue"].nil?
+  room            = "all" if room.nil?
+  set_lights(red: colors["red"], green: colors["green"], blue: colors["blue"], location: server)
+elsif ARGV.include?("--help")
+  puts "\n    ## Light Controller"
+  puts "      Usage:"
+  puts "      Please specify colors by name, json or rgb:\n"
+  puts "          lctrl [options]"
+  puts "      Options:"
+  puts "          --server [option]       # Provide the name of a server, if none defined all will be used\n"
+  puts "          --red    [option]       # Provide a number 0-255, 0 being off and 255 being the brightest\n"
+  puts "          --green  [option]       # Provide a number 0-255, 0 being off and 255 being the brightest\n"
+  puts "          --blue   [option]       # Provide a number 0-255, 0 being off and 255 being the brightest\n"
+  puts "          --color  [option]       # Select between, \"red\", \"blue\", \"green\" or \"white\"\n"
+  puts "          --json   [json]         # Supply json directly: {\"red\": 0, \"blue\": 255, \"green\", 0}"
+  puts "          --random               # Randomly select a color\n"
+  puts "          --off                  # Turns off the lights\n"
+  puts "      Example:"
+  puts "          lctrl -g 255 -b 24\n\n"
+end
